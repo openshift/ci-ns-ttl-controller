@@ -1,0 +1,19 @@
+# Gopkg.toml for github.com/openshift/ci-ns-ttl-controller
+
+[prune]
+  go-tests = true
+  non-go = true
+  unused-packages = true
+
+[[constraint]]
+  name = "k8s.io/api"
+  branch = "release-1.10"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  branch = "release-1.10"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "v7.0.0"
+
