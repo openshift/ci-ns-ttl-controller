@@ -1,0 +1,94 @@
+---
+apiVersion: v1
+kind: ImageStream
+metadata:
+  name: namespace-ttl-controller
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  labels:
+    ci.openshift.io/source-repo: ci-ns-ttl-operator
+  name: namespace-ttl-controller
+spec:
+  failedBuildsHistoryLimit: 2
+  output:
+    to:
+      kind: ImageStreamTag
+      name: namespace-ttl-controller:latest
+  runPolicy: Serial
+  source:
+    dockerfile: |
+      FROM docker.io/alpine:latest
+
+      RUN apk add --no-cache ca-certificates
+      COPY ci-ns-ttl-controller /ci-ns-ttl-controller
+    git:
+      ref: master
+      uri: https://github.com/openshift/ci-ns-ttl-controller.git
+    images:
+    - from:
+        kind: ImageStreamTag
+        name: namespace-ttl-controller:binaries
+      paths:
+      - destinationDir: .
+        sourcePath: /go/bin/ci-ns-ttl-controller
+    type: Git
+  strategy:
+    dockerStrategy:
+      from:
+        kind: DockerImage
+        name: docker.io/alpine:latest
+      imageOptimizationPolicy: SkipLayers
+    type: Docker
+  successfulBuildsHistoryLimit: 1
+  triggers:
+  - imageChange:
+      from:
+        kind: ImageStreamTag
+        name: namespace-ttl-controller:binaries
+    type: ImageChange
+---
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  labels:
+    ci.openshift.io/source-repo: ci-ns-ttl-controller
+  name: namespace-ttl-controller-binaries
+spec:
+  failedBuildsHistoryLimit: 2
+  nodeSelector: null
+  output:
+    to:
+      kind: ImageStreamTag
+      name: namespace-ttl-controller:binaries
+  runPolicy: Serial
+  source:
+    dockerfile: |
+      FROM docker.io/golang:1.10
+
+      COPY . /go/src/github.com/openshift/ci-ns-ttl-controller
+      RUN cd /go/src/github.com/openshift/ci-ns-ttl-controller && \
+          CGO_ENABLED=0 go install ./cmd/... && \
+          rm -rf /go/src /go/pkg
+    git:
+      ref: master
+      uri: https://github.com/openshift/ci-ns-ttl-controller.git
+    type: Git
+  strategy:
+    dockerStrategy:
+      from:
+        kind: DockerImage
+        name: docker.io/golang:1.10
+      imageOptimizationPolicy: SkipLayers
+    type: Docker
+  successfulBuildsHistoryLimit: 1
+  triggers:
+  - type: ConfigChange
+  - github:
+      secretReference:
+        name: github-deploymentconfig-trigger
+    type: GitHub

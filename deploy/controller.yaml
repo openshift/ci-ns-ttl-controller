@@ -1,0 +1,37 @@
+---
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  labels:
+    app: namespace-ttl-controller
+  name: namespace-ttl-controller
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    app: namespace-ttl-controller
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: namespace-ttl-controller
+    spec:
+      serviceAccount: namespace-ttl-controller
+      containers:
+      - name: namespace-ttl-controller
+        image: namespace-ttl-controller:latest
+        imagePullPolicy: Always
+        command:
+        - /ci-ns-ttl-operator
+  triggers:
+  - type: ConfigChange
+  - type: ImageChange
+    imageChangeParams:
+      automatic: true
+      containerNames:
+      - namespace-ttl-controller
+      from:
+        kind: ImageStreamTag
+        name: namespace-ttl-controller:latest
+        namespace: ci
