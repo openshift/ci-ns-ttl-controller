@@ -173,96 +173,158 @@ func (c *TTLManager) reconcile(key string) error {
 		return err
 	}
 
-	var deleteAt time.Time
-	deleteAtString, deleteAtPresent := ns.ObjectMeta.Annotations[deleteAtAnnotation]
-	if deleteAtPresent {
-		logger = logger.WithField("delete-at", deleteAtString)
-		deleteAt, err = time.Parse(deleteAtString, time.RFC3339)
-		if err != nil {
-			logger.WithError(err).Errorf("unable to parse delete-at annotation")
-			return err
-		}
+	selector := labels.NewSelector()
+	requirement, err := labels.NewRequirement(ignorePodLabel, selection.DoesNotExist, []string{})
+	if err != nil {
+		logger.WithError(err).Error("unable to create requirements for pod selector")
+		return err
 	}
+	selector.Add(*requirement)
 
-	var hardTtl time.Duration
-	var hardDeleteAt time.Time
-	hardTtlString, hardTtlPresent := ns.ObjectMeta.Annotations[hardTTLAnnotation]
-	if hardTtlPresent {
-		logger = logger.WithField("hard-ttl", hardTtlString)
-		hardTtl, err = time.ParseDuration(hardTtlString)
-		if err != nil {
-			logger.WithError(err).Errorf("unable to parse hard TTL annotation")
-			return err
-		}
-
-		hardDeleteAt = ns.ObjectMeta.CreationTimestamp.Add(hardTtl)
-	}
-
-	softTtlString, softTtlPresent := ns.ObjectMeta.Annotations[softTTLAnnotation]
-	var softTtl time.Duration
-	var softDeleteAt time.Time
-	var active bool
-	if softTtlPresent {
-		logger = logger.WithField("soft-ttl", softTtlString)
-		softTtl, err = time.ParseDuration(softTtlString)
-		if err != nil {
-			logger.WithError(err).Errorf("unable to parse hard TTL annotation")
-			return err
-		}
-		selector := labels.NewSelector()
-		requirement, err := labels.NewRequirement(ignorePodLabel, selection.DoesNotExist, []string{})
-		if err != nil {
-			logger.WithError(err).Error("unable to create requirements for pod selector")
-		}
-		selector.Add(*requirement)
+	processPods := func() (bool, time.Time, error) {
 		pods, err := c.podLister.Pods(name).List(selector)
 		if err != nil {
 			logger.WithError(err).Error("unable to list pods in namespace")
-			return err
+			return false, time.Time{}, err
 		}
-
-		var lastTransitionTime time.Time
-		active, lastTransitionTime = digestPods(pods)
-		logger = logger.WithField("namespace-active", active)
-		softDeleteAt = lastTransitionTime.Add(softTtl)
+		active, lastTransition := digestPods(pods)
+		if len(pods) == 0 {
+			lastTransition = time.Now()
+		}
+		return active, lastTransition, nil
 	}
 
-	if hardTtlPresent {
-		if deleteAtPresent && deleteAt.After(hardDeleteAt) {
-			logger.Info("shortening delete-at to hard TTL")
-			return c.updateDeleteAtAnnotation(ns, hardDeleteAt)
-		}
-
-		logger.Info("adding delete-at at hard TTL")
-		return c.updateDeleteAtAnnotation(ns, hardDeleteAt)
+	status, err := resolveTtlStatus(ns, processPods, logger)
+	if err != nil {
+		return err
 	}
 
-	if softTtlPresent {
-		if active && deleteAtPresent {
-			if hardTtlPresent && !deleteAt.Equal(hardDeleteAt) {
-				logger.Info("lengthening delete-at to hard TTL")
-				return c.updateDeleteAtAnnotation(ns, hardDeleteAt)
-			} else if !hardTtlPresent {
-				logger.Info("removing delete-at")
-				return c.removeDeleteAtAnnotation(ns)
-			}
-		} else if !active {
-			if deleteAtPresent && deleteAt.After(softDeleteAt) {
-				logger.Info("shortening delete-at to soft TTL")
-				return c.updateDeleteAtAnnotation(ns, softDeleteAt)
-			} else if !deleteAtPresent {
-				logger.Info("adding delete-at at soft TTL")
-				return c.updateDeleteAtAnnotation(ns, softDeleteAt)
-			}
-		}
-	}
-
-	if deleteAtPresent && !(hardTtlPresent || softTtlPresent) {
-		logger.Info("removing delete-at")
+	shouldUpdate, shouldRemove, requiredDeleteAt := determineDeleteAt(status)
+	if shouldRemove {
 		return c.removeDeleteAtAnnotation(ns)
 	}
-
+	if shouldUpdate {
+		status.logger.WithField("requested-delete-at", requiredDeleteAt.Format(time.RFC3339)).Info("updating delete-at")
+		return c.updateDeleteAtAnnotation(ns, requiredDeleteAt)
+	}
 	return nil
+}
+
+// ttlStatus wraps digested information for a namesapce for ease of processing
+type ttlStatus struct {
+	hardTtlPresent, softTtlPresent, deleteAtPresent, active bool
+	hardDeleteAt, softDeleteAt, deleteAt                    time.Time
+	logger                                                  *logrus.Entry
+}
+
+// resolveTtlStatus digests the Namespace and potentially the Pods in the Namespace
+// to determine the requested TTLs and current delete-at status, as well as if the
+// Namespace is active if a soft TTL is requested
+func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time, error), logger *logrus.Entry) (ttlStatus, error) {
+	status := ttlStatus{
+		logger: logger,
+	}
+	deleteAtString, deleteAtPresent := ns.ObjectMeta.Annotations[deleteAtAnnotation]
+	status.deleteAtPresent = deleteAtPresent
+	if deleteAtPresent {
+		status.logger = status.logger.WithField("delete-at", deleteAtString)
+		deleteAt, err := time.Parse(time.RFC3339, deleteAtString)
+		if err != nil {
+			status.logger.WithError(err).Errorf("unable to parse delete-at annotation")
+			return status, err
+		}
+		status.deleteAt = deleteAt
+	}
+
+	hardTtlString, hardTtlPresent := ns.ObjectMeta.Annotations[hardTTLAnnotation]
+	status.hardTtlPresent = hardTtlPresent
+	if hardTtlPresent {
+		status.logger = status.logger.WithField("hard-ttl", hardTtlString)
+		hardTtl, err := time.ParseDuration(hardTtlString)
+		if err != nil {
+			status.logger.WithError(err).Errorf("unable to parse hard TTL annotation")
+			return status, err
+		}
+
+		status.hardDeleteAt = ns.ObjectMeta.CreationTimestamp.Add(hardTtl)
+	}
+
+	softTtlString, softTtlPresent := ns.ObjectMeta.Annotations[softTTLAnnotation]
+	status.softTtlPresent = softTtlPresent
+	if softTtlPresent {
+		status.logger = status.logger.WithField("soft-ttl", softTtlString)
+		softTtl, err := time.ParseDuration(softTtlString)
+		if err != nil {
+			status.logger.WithError(err).Errorf("unable to parse hard TTL annotation")
+			return status, err
+		}
+
+		active, lastTransitionTime, err := processPods()
+		if err != nil {
+			status.logger.WithError(err).Errorf("unable to process Pods")
+			return status, err
+		}
+		status.active = active
+		status.logger = status.logger.WithField("active", active)
+		if !lastTransitionTime.IsZero() {
+			status.softDeleteAt = lastTransitionTime.Add(softTtl)
+		}
+	}
+
+	return status, nil
+}
+
+// determineDeleteAt holds the logic for the reconciliation loop by digesting
+// the current TTL status and determining what the appropriate delete-at annotation
+// should be after this reconciliation loop. We return whether an update should
+// occur, whether that update should be a removal of the annotation, or what the
+// anontation should be updated to
+func determineDeleteAt(status ttlStatus) (bool, bool, time.Time) {
+	if status.hardTtlPresent {
+		if status.deleteAtPresent {
+			if status.deleteAt.After(status.hardDeleteAt) {
+				status.logger.Info("shortening delete-at to hard TTL")
+				return true, false, status.hardDeleteAt
+			}
+		} else {
+			status.logger.Info("adding delete-at at hard TTL")
+			return true, false, status.hardDeleteAt
+		}
+	}
+
+	if status.softTtlPresent {
+		if status.active && status.deleteAtPresent {
+			if status.hardTtlPresent && !status.deleteAt.Equal(status.hardDeleteAt) {
+				status.logger.Info("lengthening delete-at to hard TTL")
+				return true, false, status.hardDeleteAt
+			} else if !status.hardTtlPresent {
+				status.logger.Info("removing delete-at")
+				return false, true, time.Time{}
+			}
+		} else if !status.active {
+			if status.deleteAtPresent {
+				if status.deleteAt.After(status.softDeleteAt) {
+					status.logger.Info("shortening delete-at to soft TTL")
+					return true, false, status.softDeleteAt
+				} else if !status.hardTtlPresent || !status.deleteAt.Equal(status.hardDeleteAt){
+					// last delete-at was added as a soft TTL but we missed a sync
+					// when the namespace was active, but we need to recover now
+					status.logger.Info("lengthening delete-at to soft TTL")
+					return true, false, status.softDeleteAt
+				}
+			} else if !status.deleteAtPresent {
+				status.logger.Info("adding delete-at at soft TTL")
+				return true, false, status.softDeleteAt
+			}
+		}
+	}
+
+	if status.deleteAtPresent && !(status.hardTtlPresent || status.softTtlPresent) {
+		status.logger.Info("removing delete-at")
+		return false, true, time.Time{}
+	}
+
+	return false, false, time.Time{}
 }
 
 func (c *TTLManager) removeDeleteAtAnnotation(ns *coreapi.Namespace) error {
@@ -285,7 +347,7 @@ func digestPods(pods []*coreapi.Pod) (bool, time.Time) {
 	var lastTransitionTime time.Time
 	for _, pod := range pods {
 		if pod.Status.Phase == coreapi.PodPending || pod.Status.Phase == coreapi.PodRunning {
-			return true, lastTransitionTime
+			return true, time.Time{}
 		}
 		for _, status := range pod.Status.ContainerStatuses {
 			if status.State.Terminated != nil {
