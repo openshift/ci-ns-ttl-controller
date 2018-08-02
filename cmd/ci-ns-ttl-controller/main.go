@@ -10,10 +10,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/informers"
 
 	"github.com/openshift/ci-ns-ttl-controller/pkg/controller"
 )
