@@ -34,7 +34,7 @@ const (
 )
 
 // NewTTLManager returns a new *TTLManager to generate deletion requests.
-func NewTTLManager(informer coreinformers.NamespaceInformer, podLister corelisters.PodLister, client kubeclientset.Interface) *TTLManager {
+func NewTTLManager(informer coreinformers.NamespaceInformer, podInformer coreinformers.PodInformer, client kubeclientset.Interface) *TTLManager {
 	logger := logrus.WithField("controller", controllerName)
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(logger.Infof)
@@ -45,13 +45,18 @@ func NewTTLManager(informer coreinformers.NamespaceInformer, podLister coreliste
 		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
 		logger:          logger,
 		namespaceLister: informer.Lister(),
-		podLister:       podLister,
-		synced:          informer.Informer().HasSynced,
+		podLister:       podInformer.Lister(),
+		synced:          []cache.InformerSynced{informer.Informer().HasSynced, podInformer.Informer().HasSynced},
 	}
 
 	informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.add,
 		UpdateFunc: c.update,
+	})
+	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.addPod,
+		UpdateFunc: c.updatePod,
+		DeleteFunc: c.deletePod,
 	})
 
 	return c
@@ -64,7 +69,7 @@ type TTLManager struct {
 	namespaceLister corelisters.NamespaceLister
 	podLister       corelisters.PodLister
 	queue           workqueue.RateLimitingInterface
-	synced          cache.InformerSynced
+	synced          []cache.InformerSynced
 
 	logger *logrus.Entry
 }
@@ -81,6 +86,45 @@ func (c *TTLManager) update(old, obj interface{}) {
 	c.enqueue(ns)
 }
 
+func (c *TTLManager) addPod(obj interface{}) {
+	pod := obj.(*coreapi.Pod)
+	c.logger.Debugf("enqueueing namespace for added pod %s/%s", pod.GetNamespace(), pod.GetName())
+	c.enqueuePod(pod)
+}
+
+func (c *TTLManager) updatePod(old, obj interface{}) {
+	pod := obj.(*coreapi.Pod)
+	c.logger.Debugf("enqueueing namespace for updated pod %s/%s", pod.GetNamespace(), pod.GetName())
+	c.enqueuePod(pod)
+}
+
+func (c *TTLManager) deletePod(obj interface{}) {
+	pod, ok := obj.(*coreapi.Pod)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
+			return
+		}
+		pod, ok = tombstone.Obj.(*coreapi.Pod)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not an Object %#v", obj))
+			return
+		}
+	}
+	c.logger.Debugf("enqueueing namespace for deleted pod %s/%s", pod.GetNamespace(), pod.GetName())
+	c.enqueuePod(pod)
+}
+
+func (c *TTLManager) enqueuePod(pod *coreapi.Pod) {
+	ns, err := c.namespaceLister.Get(pod.ObjectMeta.Namespace)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("couldn't get namespace for pod %#v: %v", pod, err))
+		return
+	}
+	c.enqueue(ns)
+}
+
 // Run runs c; will not return until stopCh is closed. workers determines how
 // many clusters will be handled in parallel.
 func (c *TTLManager) Run(workers int, stopCh <-chan struct{}) {
@@ -91,7 +135,7 @@ func (c *TTLManager) Run(workers int, stopCh <-chan struct{}) {
 	defer c.logger.Infof("shutting down %s controller", controllerName)
 
 	c.logger.Infof("Waiting for caches to reconcile for %s controller", controllerName)
-	if !cache.WaitForCacheSync(stopCh, c.synced) {
+	if !cache.WaitForCacheSync(stopCh, c.synced...) {
 		utilruntime.HandleError(fmt.Errorf("unable to reconcile caches for %s controller", controllerName))
 	}
 	c.logger.Infof("Caches are synced for %s controller", controllerName)
@@ -306,7 +350,7 @@ func determineDeleteAt(status ttlStatus) (bool, bool, time.Time) {
 				if status.deleteAt.After(status.softDeleteAt) {
 					status.logger.Info("shortening delete-at to soft TTL")
 					return true, false, status.softDeleteAt
-				} else if !status.hardTtlPresent || !status.deleteAt.Equal(status.hardDeleteAt){
+				} else if !status.hardTtlPresent || !status.deleteAt.Equal(status.hardDeleteAt) {
 					// last delete-at was added as a soft TTL but we missed a sync
 					// when the namespace was active, but we need to recover now
 					status.logger.Info("lengthening delete-at to soft TTL")

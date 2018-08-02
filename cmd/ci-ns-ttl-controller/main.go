@@ -60,7 +60,7 @@ func main() {
 	nsInformerFactory := informers.NewSharedInformerFactory(client, resync)
 
 	nsReaper := controller.NewReaper(nsInformerFactory.Core().V1().Namespaces(), client)
-	nsTtlManager := controller.NewTTLManager(nsInformerFactory.Core().V1().Namespaces(), nsInformerFactory.Core().V1().Pods().Lister(), client)
+	nsTtlManager := controller.NewTTLManager(nsInformerFactory.Core().V1().Namespaces(), nsInformerFactory.Core().V1().Pods(), client)
 	stop := make(chan struct{})
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
