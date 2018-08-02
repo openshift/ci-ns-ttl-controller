@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -489,7 +490,7 @@ func TestDigestPods(t *testing.T) {
 						},
 					}},
 				},
-			},{
+			}, {
 				Status: coreapi.PodStatus{
 					ContainerStatuses: []coreapi.ContainerStatus{{
 						State: coreapi.ContainerState{

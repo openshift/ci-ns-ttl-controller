@@ -216,6 +216,10 @@ func (c *TTLManager) reconcile(key string) error {
 		logger.WithError(err).Errorf("unable to retrieve namespace from store")
 		return err
 	}
+	if !ns.ObjectMeta.DeletionTimestamp.IsZero() {
+		logger.Info("not doing work for namespace because it is being deleted")
+		return nil
+	}
 
 	selector := labels.NewSelector()
 	requirement, err := labels.NewRequirement(ignorePodLabel, selection.DoesNotExist, []string{})

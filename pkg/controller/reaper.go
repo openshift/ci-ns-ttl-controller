@@ -171,6 +171,10 @@ func (c *Reaper) reconcile(key string) error {
 		logger.WithError(err).Errorf("unable to retrieve namespace from store")
 		return err
 	}
+	if !ns.ObjectMeta.DeletionTimestamp.IsZero() {
+		logger.Info("not doing work for namespace because it is being deleted")
+		return nil
+	}
 
 	if deleteAtString, present := ns.ObjectMeta.Annotations[deleteAtAnnotation]; present {
 		deleteAt, err := time.Parse(deleteAtString, time.RFC3339)
