@@ -31,18 +31,20 @@ const (
 	// ignorePodLabel is negated to create the label selector for pods that we
 	// will consider when determining if a namespace is active
 	ignorePodLabel = "ci.openshift.io/ttl.ignore"
+
+	ttlManagerName = "namespace-ttl-manager"
 )
 
 // NewTTLManager returns a new *TTLManager to generate deletion requests.
 func NewTTLManager(informer coreinformers.NamespaceInformer, podInformer coreinformers.PodInformer, client kubeclientset.Interface) *TTLManager {
-	logger := logrus.WithField("controller", controllerName)
+	logger := logrus.WithField("controller", ttlManagerName)
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(logger.Infof)
 	eventBroadcaster.StartRecordingToSink(&coreclient.EventSinkImpl{Interface: coreclient.New(client.CoreV1().RESTClient()).Events("")})
 
 	c := &TTLManager{
 		client:          client,
-		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
+		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ttlManagerName),
 		logger:          logger,
 		namespaceLister: informer.Lister(),
 		podLister:       podInformer.Lister(),
@@ -131,14 +133,14 @@ func (c *TTLManager) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	c.logger.Infof("starting %s controller", controllerName)
-	defer c.logger.Infof("shutting down %s controller", controllerName)
+	c.logger.Infof("starting %s controller", ttlManagerName)
+	defer c.logger.Infof("shutting down %s controller", ttlManagerName)
 
-	c.logger.Infof("Waiting for caches to reconcile for %s controller", controllerName)
+	c.logger.Infof("Waiting for caches to reconcile for %s controller", ttlManagerName)
 	if !cache.WaitForCacheSync(stopCh, c.synced...) {
-		utilruntime.HandleError(fmt.Errorf("unable to reconcile caches for %s controller", controllerName))
+		utilruntime.HandleError(fmt.Errorf("unable to reconcile caches for %s controller", ttlManagerName))
 	}
-	c.logger.Infof("Caches are synced for %s controller", controllerName)
+	c.logger.Infof("Caches are synced for %s controller", ttlManagerName)
 
 	for i := 0; i < workers; i++ {
 		go wait.Until(c.worker, time.Second, stopCh)

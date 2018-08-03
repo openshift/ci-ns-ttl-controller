@@ -177,18 +177,19 @@ func (c *Reaper) reconcile(key string) error {
 	}
 
 	if deleteAtString, present := ns.ObjectMeta.Annotations[deleteAtAnnotation]; present {
-		deleteAt, err := time.Parse(deleteAtString, time.RFC3339)
+		deleteAt, err := time.Parse(time.RFC3339, deleteAtString)
 		if err != nil {
 			logger.WithError(err).Errorf("unable to parse delete-at annotation")
 			return err
 		}
 
 		if time.Now().After(deleteAt) {
+			logger.Info("namespace is past it's TTL, deleting")
 			return c.client.CoreV1().Namespaces().Delete(name, &metav1.DeleteOptions{})
 		} else {
 			// fuzz the retry into the future so we don't have weird time collisions
 			retryAt := deleteAt.Add(10 * time.Second)
-			logger.Info("queuing for future reconciliation at %s", retryAt.Format(time.RFC3339))
+			logger.Infof("queuing for future reconciliation at %s", retryAt.Format(time.RFC3339))
 			c.queue.AddAfter(key, retryAt.Sub(time.Now()))
 		}
 	}

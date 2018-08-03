@@ -23,7 +23,7 @@ spec:
         image: namespace-ttl-controller:latest
         imagePullPolicy: Always
         command:
-        - /ci-ns-ttl-operator
+        - /ci-ns-ttl-controller
   triggers:
   - type: ConfigChange
   - type: ImageChange
