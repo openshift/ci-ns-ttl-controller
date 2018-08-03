@@ -6,6 +6,10 @@ test:
 	go test ./...
 .PHONY: test
 
+lint:
+	go vet ./...
+.PHONY: lint
+
 deploy: set-namespace deploy-ci-ns-ttl-controller
 .PHONY: deploy
 
