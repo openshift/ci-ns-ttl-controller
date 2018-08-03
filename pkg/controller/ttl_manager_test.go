@@ -22,6 +22,7 @@ func TestResolveTtlStatus(t *testing.T) {
 		podError       error
 		expected       ttlStatus
 		expectedErr    bool
+		expectedRetry  bool
 	}{
 		{
 			name: "no TTL configured, no delete-at present",
@@ -198,8 +199,9 @@ func TestResolveTtlStatus(t *testing.T) {
 					},
 				},
 			},
-			podError:    fmt.Errorf("listing pods is on-demand so this should happen"),
-			expectedErr: true,
+			podError:      fmt.Errorf("listing pods is on-demand so this should happen"),
+			expectedErr:   true,
+			expectedRetry: true,
 		},
 	}
 
@@ -211,12 +213,15 @@ func TestResolveTtlStatus(t *testing.T) {
 			log := logrus.New()
 			log.Formatter = &logrus.JSONFormatter{}
 			logger := log.WithField("test", testCase.name)
-			actual, err := resolveTtlStatus(testCase.ns, processPods, logger)
+			actual, err, retry := resolveTtlStatus(testCase.ns, processPods, logger)
 			if !testCase.expectedErr && err != nil {
 				t.Errorf("%s: expected no error but got %v", testCase.name, err)
 			}
 			if testCase.expectedErr && err == nil {
 				t.Errorf("%s: expected error but got none", testCase.name)
+			}
+			if testCase.expectedRetry != retry {
+				t.Errorf("%s: expected retry %v but got %v", testCase.name, testCase.expectedRetry, retry)
 			}
 			if testCase.expectedErr {
 				// if we have an error, status is not to be read

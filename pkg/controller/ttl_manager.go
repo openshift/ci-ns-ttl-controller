@@ -244,8 +244,8 @@ func (c *TTLManager) reconcile(key string) error {
 		return active, lastTransition, nil
 	}
 
-	status, err := resolveTtlStatus(ns, processPods, logger)
-	if err != nil {
+	status, err, retry := resolveTtlStatus(ns, processPods, logger)
+	if err != nil && retry {
 		return err
 	}
 
@@ -270,7 +270,7 @@ type ttlStatus struct {
 // resolveTtlStatus digests the Namespace and potentially the Pods in the Namespace
 // to determine the requested TTLs and current delete-at status, as well as if the
 // Namespace is active if a soft TTL is requested
-func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time, error), logger *logrus.Entry) (ttlStatus, error) {
+func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time, error), logger *logrus.Entry) (ttlStatus, error, bool) {
 	status := ttlStatus{
 		logger: logger,
 	}
@@ -281,7 +281,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		deleteAt, err := time.Parse(time.RFC3339, deleteAtString)
 		if err != nil {
 			status.logger.WithError(err).Errorf("unable to parse delete-at annotation")
-			return status, err
+			return status, err, false // retrying this won't help until we see a new update
 		}
 		status.deleteAt = deleteAt
 	}
@@ -293,7 +293,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		hardTtl, err := time.ParseDuration(hardTtlString)
 		if err != nil {
 			status.logger.WithError(err).Errorf("unable to parse hard TTL annotation")
-			return status, err
+			return status, err, false // retrying this won't help until we see a new update
 		}
 
 		status.hardDeleteAt = ns.ObjectMeta.CreationTimestamp.Add(hardTtl)
@@ -306,13 +306,13 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		softTtl, err := time.ParseDuration(softTtlString)
 		if err != nil {
 			status.logger.WithError(err).Errorf("unable to parse hard TTL annotation")
-			return status, err
+			return status, err, false // retrying this won't help until we see a new update
 		}
 
 		active, lastTransitionTime, err := processPods()
 		if err != nil {
 			status.logger.WithError(err).Errorf("unable to process Pods")
-			return status, err
+			return status, err, true // retrying this might be useful
 		}
 		status.active = active
 		status.logger = status.logger.WithField("active", active)
@@ -321,7 +321,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		}
 	}
 
-	return status, nil
+	return status, nil, false
 }
 
 // determineDeleteAt holds the logic for the reconciliation loop by digesting

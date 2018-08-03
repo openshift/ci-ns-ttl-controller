@@ -180,7 +180,7 @@ func (c *Reaper) reconcile(key string) error {
 		deleteAt, err := time.Parse(time.RFC3339, deleteAtString)
 		if err != nil {
 			logger.WithError(err).Errorf("unable to parse delete-at annotation")
-			return err
+			return nil // retrying this won't help until we see a new update
 		}
 
 		if time.Now().After(deleteAt) {
