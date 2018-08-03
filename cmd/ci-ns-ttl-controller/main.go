@@ -41,12 +41,6 @@ func main() {
 	}
 	logrus.SetLevel(level)
 
-	configFile, err := os.Open(o.configLocation)
-	if err != nil {
-		logrus.WithError(err).Fatal("could not read configuration file")
-	}
-	defer configFile.Close()
-
 	clusterConfig, err := loadClusterConfig()
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to load cluster config")
