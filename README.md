@@ -1,7 +1,8 @@
 # ci-ns-ttl-controller
 
-This controller manages hard and soft TTLs for namespaces in order to stop resource leaks from test workloads. TTLs can be configured
-for a namespace by annotating the namespace:
+This tool implements a Kubernetes controller that manages hard and soft times-to-live (TTLs) for namespaces in order to ensure that
+namespaces do not persist in order stop resource leaks from test workloads. TTLs can be configured for a namespace by annotating
+the namespace either at creation time or at any later point:
 
 | TTL Type |       Annotation Key       |         Annotation Value         |                                                       Description                                                      |
 | -------- | -------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -10,12 +11,14 @@ for a namespace by annotating the namespace:
 
 Whichever TTL is reached first will be used by the controller to delete the namespace.
 
-The controller will ignore certain pods for the soft TTL calculations, allowing those pods to keep running while considering the
-namespace to be inactive. The deployment configured for the OpenShift CI system will only consider pods matching the
-`!ci.openshift.io/ttl.ignore` selector for soft TTL calculations.
+The controller will will only consider pods matching the `!ci.openshift.io/ttl.ignore` selector for soft TTL calculations, allowing
+non-matching pods to keep running while considering the namespace to be inactive.
 
-## Design
+## Deployment
 
-This controller works in two parts. First is a controller that runs off of a `Namespace` informer and determines if the current
-requested deletion time has passed and, if so, deletes the namespace. The second controller runs off of both `Namespace` and `Pod`
-informers and updates the requested deletion time by reconciling the current state of requested TTLs and namespace activity.
+Deployment of these components requires `system:admin` level control, as it requires creating wide-reaching `ClusterRole`s and
+`ClusterRoleBinding`s. To deploy, run:
+
+```
+make deploy
+```
