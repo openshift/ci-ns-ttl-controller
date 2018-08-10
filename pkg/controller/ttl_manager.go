@@ -248,9 +248,11 @@ func (c *TTLManager) reconcile(key string) error {
 	if err != nil && retry {
 		return err
 	}
+	status.logger.Debug("resolved TTL status")
 
 	shouldUpdate, shouldRemove, requiredDeleteAt := determineDeleteAt(status)
 	if shouldRemove {
+		status.logger.Info("removing delete-at")
 		return c.removeDeleteAtAnnotation(ns)
 	}
 	if shouldUpdate {
