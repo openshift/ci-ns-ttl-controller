@@ -299,6 +299,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		}
 
 		status.hardDeleteAt = ns.ObjectMeta.CreationTimestamp.Add(hardTtl)
+		status.logger = status.logger.WithField("hard-delete-at", status.hardDeleteAt.Format(time.RFC3339))
 	}
 
 	softTtlString, softTtlPresent := ns.ObjectMeta.Annotations[softTTLAnnotation]
@@ -320,6 +321,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		status.logger = status.logger.WithField("active", active)
 		if !lastTransitionTime.IsZero() {
 			status.softDeleteAt = lastTransitionTime.Add(softTtl)
+			status.logger = status.logger.WithField("soft-delete-at", status.softDeleteAt.Format(time.RFC3339))
 		}
 	}
 
