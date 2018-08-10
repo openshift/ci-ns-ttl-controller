@@ -229,7 +229,7 @@ func (c *TTLManager) reconcile(key string) error {
 		logger.WithError(err).Error("unable to create requirements for pod selector")
 		return err
 	}
-	selector.Add(*requirement)
+	selector = selector.Add(*requirement)
 
 	processPods := func() (bool, time.Time, error) {
 		pods, err := c.podLister.Pods(name).List(selector)
