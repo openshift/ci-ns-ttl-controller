@@ -385,6 +385,19 @@ func TestDetermineDeleteAt(t *testing.T) {
 			expectedDeleteAt: time.Date(2000, time.January, 1, 1, 1, 1, 0, time.UTC),
 		},
 		{
+			name: "only soft TTL configured, namespace inactive, delete-at present and identical, do nothing",
+			status: ttlStatus{
+				hardTtlPresent:  false,
+				softTtlPresent:  true,
+				softDeleteAt:    time.Date(2000, time.January, 1, 1, 1, 1, 0, time.UTC),
+				active:          false,
+				deleteAtPresent: true,
+				deleteAt:        time.Date(2000, time.January, 1, 1, 1, 1, 0, time.UTC),
+			},
+			expectedUpdate: false,
+			expectedDelete: false,
+		},
+		{
 			name: "only soft TTL configured, namespace inactive, delete-at present and earlier, update to soft TTL",
 			status: ttlStatus{
 				hardTtlPresent:  false,

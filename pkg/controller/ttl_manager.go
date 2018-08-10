@@ -360,7 +360,7 @@ func determineDeleteAt(status ttlStatus) (bool, bool, time.Time) {
 				if status.deleteAt.After(status.softDeleteAt) {
 					status.logger.Info("shortening delete-at to soft TTL")
 					return true, false, status.softDeleteAt
-				} else if !status.hardTtlPresent || !status.deleteAt.Equal(status.hardDeleteAt) {
+				} else if status.deleteAt.Before(status.softDeleteAt) && (!status.hardTtlPresent || !status.deleteAt.Equal(status.hardDeleteAt)) {
 					// last delete-at was added as a soft TTL but we missed a sync
 					// when the namespace was active, but we need to recover now
 					status.logger.Info("lengthening delete-at to soft TTL")
