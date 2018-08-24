@@ -7,8 +7,13 @@ test:
 .PHONY: test
 
 lint:
+	gofmt -s -l $(shell go list -f '{{ .Dir }}' ./... ) | grep ".*\.go"; if [ "$$?" = "0" ]; then exit 1; fi
 	go vet ./...
 .PHONY: lint
+
+format:
+	gofmt -s -w $(shell go list -f '{{ .Dir }}' ./... )
+.PHONY: format
 
 deploy: set-namespace deploy-ci-ns-ttl-controller
 .PHONY: deploy
