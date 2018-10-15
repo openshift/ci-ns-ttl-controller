@@ -203,6 +203,86 @@ func TestResolveTtlStatus(t *testing.T) {
 			expectedErr:   true,
 			expectedRetry: true,
 		},
+		{
+			name: "last transition before the activeAnnotation so it is ignored",
+			ns: &coreapi.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						softTTLAnnotation: time.Minute.String(),
+						activeAnnotation:  time.Date(2000, time.February, 4, 3, 3, 3, 0, time.UTC).Format(time.RFC3339),
+					},
+				},
+			},
+			active:         false,
+			lastTransition: time.Date(2000, time.February, 3, 3, 3, 3, 0, time.UTC),
+			expected: ttlStatus{
+				hardTtlPresent:  false,
+				softTtlPresent:  true,
+				softDeleteAt:    time.Date(2000, time.February, 4, 3, 4, 3, 0, time.UTC),
+				active:          false,
+				deleteAtPresent: false,
+			},
+		},
+		{
+			name: "last transition after the activeAnnotation so it will be used",
+			ns: &coreapi.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						softTTLAnnotation: time.Minute.String(),
+						activeAnnotation:  time.Date(2000, time.February, 2, 3, 3, 3, 0, time.UTC).Format(time.RFC3339),
+					},
+				},
+			},
+			active:         false,
+			lastTransition: time.Date(2000, time.February, 3, 3, 3, 3, 0, time.UTC),
+			expected: ttlStatus{
+				hardTtlPresent:  false,
+				softTtlPresent:  true,
+				softDeleteAt:    time.Date(2000, time.February, 3, 3, 4, 3, 0, time.UTC),
+				active:          false,
+				deleteAtPresent: false,
+			},
+		},
+		{
+			name: "ignore activeAnnotation parsing error and use lastTransition",
+			ns: &coreapi.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						softTTLAnnotation: time.Minute.String(),
+						activeAnnotation:  "foo",
+					},
+				},
+			},
+			active:         false,
+			lastTransition: time.Date(2000, time.February, 3, 3, 3, 3, 0, time.UTC),
+			expected: ttlStatus{
+				hardTtlPresent:  false,
+				softTtlPresent:  true,
+				softDeleteAt:    time.Date(2000, time.February, 3, 3, 4, 3, 0, time.UTC),
+				active:          false,
+				deleteAtPresent: false,
+			},
+		},
+		{
+			name: "in active namespace ignore activeAnnotation and use softTTLAnnotation",
+			ns: &coreapi.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						softTTLAnnotation: time.Minute.String(),
+						activeAnnotation:  time.Date(2000, time.February, 3, 4, 3, 3, 0, time.UTC).Format(time.RFC3339),
+					},
+				},
+			},
+			active:         true,
+			lastTransition: time.Date(2000, time.February, 3, 2, 3, 3, 0, time.UTC),
+			expected: ttlStatus{
+				hardTtlPresent:  false,
+				softTtlPresent:  true,
+				softDeleteAt:    time.Date(2000, time.February, 3, 2, 4, 3, 0, time.UTC),
+				active:          true,
+				deleteAtPresent: false,
+			},
+		},
 	}
 
 	for _, testCase := range testCases {

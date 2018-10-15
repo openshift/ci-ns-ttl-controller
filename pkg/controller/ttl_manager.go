@@ -27,6 +27,7 @@ const (
 	// the requested TTL durations, presented in time.Duration-formatted strings
 	hardTTLAnnotation = "ci.openshift.io/ttl.hard"
 	softTTLAnnotation = "ci.openshift.io/ttl.soft"
+	activeAnnotation  = "ci.openshift.io/active"
 
 	// ignorePodLabel is negated to create the label selector for pods that we
 	// will consider when determining if a namespace is active
@@ -320,6 +321,18 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		status.active = active
 		status.logger = status.logger.WithField("active", active)
 		if !lastTransitionTime.IsZero() {
+			// If the namespace has an `active` annotation and
+			// it's after the last transition time, use that instead.
+			if activeMarkerString, exists := ns.ObjectMeta.Annotations[activeAnnotation]; exists && !status.active {
+				if activeMarker, err := time.Parse(time.RFC3339, activeMarkerString); err != nil {
+					status.logger.WithError(err).Warn("unable to parse active annotation")
+				} else {
+					status.logger = status.logger.WithField("active-at", activeMarker.Format(time.RFC3339))
+					if activeMarker.After(lastTransitionTime) {
+						lastTransitionTime = activeMarker
+					}
+				}
+			}
 			status.softDeleteAt = lastTransitionTime.Add(softTtl)
 			status.logger = status.logger.WithField("soft-delete-at", status.softDeleteAt.Format(time.RFC3339))
 		}
