@@ -240,7 +240,7 @@ func (c *TTLManager) reconcile(key string) error {
 		}
 		active, lastTransition := digestPods(pods)
 		if len(pods) == 0 {
-			lastTransition = time.Now()
+			lastTransition = ns.ObjectMeta.CreationTimestamp.Time
 		}
 		return active, lastTransition, nil
 	}
@@ -309,7 +309,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 		status.logger = status.logger.WithField("soft-ttl", softTtlString)
 		softTtl, err := time.ParseDuration(softTtlString)
 		if err != nil {
-			status.logger.WithError(err).Errorf("unable to parse hard TTL annotation")
+			status.logger.WithError(err).Errorf("unable to parse soft TTL annotation")
 			return status, err, false // retrying this won't help until we see a new update
 		}
 
@@ -345,7 +345,7 @@ func resolveTtlStatus(ns *coreapi.Namespace, processPods func() (bool, time.Time
 // the current TTL status and determining what the appropriate delete-at annotation
 // should be after this reconciliation loop. We return whether an update should
 // occur, whether that update should be a removal of the annotation, or what the
-// anontation should be updated to
+// annotation should be updated to
 func determineDeleteAt(status ttlStatus) (bool, bool, time.Time) {
 	if status.hardTtlPresent {
 		if status.deleteAtPresent {
