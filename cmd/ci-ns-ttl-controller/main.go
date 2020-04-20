@@ -23,9 +23,10 @@ const (
 )
 
 type options struct {
-	configLocation string
-	numWorkers     int
-	logLevel       string
+	configLocation                string
+	numWorkers                    int
+	logLevel                      string
+	enableExtremelyVerboseLogging bool
 }
 
 func main() {
@@ -33,6 +34,7 @@ func main() {
 	o := options{}
 	flag.IntVar(&o.numWorkers, "num-workers", 10, "Number of worker threads.")
 	flag.StringVar(&o.logLevel, "log-level", logrus.DebugLevel.String(), "Logging level.")
+	flag.BoolVar(&o.enableExtremelyVerboseLogging, "enable-extremely-verbose-logging", false, "If enabled, log each and every pod or namespace event received. Warning: This creates a huge amount of logs.")
 	flag.Parse()
 
 	level, err := logrus.ParseLevel(o.logLevel)
@@ -54,7 +56,7 @@ func main() {
 	nsInformerFactory := informers.NewSharedInformerFactory(client, resync)
 
 	nsReaper := controller.NewReaper(nsInformerFactory.Core().V1().Namespaces(), client)
-	nsTtlManager := controller.NewTTLManager(nsInformerFactory.Core().V1().Namespaces(), nsInformerFactory.Core().V1().Pods(), client)
+	nsTtlManager := controller.NewTTLManager(nsInformerFactory.Core().V1().Namespaces(), nsInformerFactory.Core().V1().Pods(), client, o.enableExtremelyVerboseLogging)
 	stop := make(chan struct{})
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

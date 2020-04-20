@@ -37,19 +37,20 @@ const (
 )
 
 // NewTTLManager returns a new *TTLManager to generate deletion requests.
-func NewTTLManager(informer coreinformers.NamespaceInformer, podInformer coreinformers.PodInformer, client kubeclientset.Interface) *TTLManager {
+func NewTTLManager(informer coreinformers.NamespaceInformer, podInformer coreinformers.PodInformer, client kubeclientset.Interface, enableExtremelyVerboseLogging bool) *TTLManager {
 	logger := logrus.WithField("controller", ttlManagerName)
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(logger.Infof)
 	eventBroadcaster.StartRecordingToSink(&coreclient.EventSinkImpl{Interface: coreclient.New(client.CoreV1().RESTClient()).Events("")})
 
 	c := &TTLManager{
-		client:          client,
-		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ttlManagerName),
-		logger:          logger,
-		namespaceLister: informer.Lister(),
-		podLister:       podInformer.Lister(),
-		synced:          []cache.InformerSynced{informer.Informer().HasSynced, podInformer.Informer().HasSynced},
+		client:                        client,
+		queue:                         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ttlManagerName),
+		logger:                        logger,
+		enableExtremelyVerboseLogging: enableExtremelyVerboseLogging,
+		namespaceLister:               informer.Lister(),
+		podLister:                     podInformer.Lister(),
+		synced:                        []cache.InformerSynced{informer.Informer().HasSynced, podInformer.Informer().HasSynced},
 	}
 
 	informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -74,30 +75,39 @@ type TTLManager struct {
 	queue           workqueue.RateLimitingInterface
 	synced          []cache.InformerSynced
 
-	logger *logrus.Entry
+	logger                        *logrus.Entry
+	enableExtremelyVerboseLogging bool
 }
 
 func (c *TTLManager) add(obj interface{}) {
 	ns := obj.(*coreapi.Namespace)
-	c.logger.Debugf("enqueueing added ns %s/%s", ns.GetNamespace(), ns.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing added ns %s/%s", ns.GetNamespace(), ns.GetName())
+	}
 	c.enqueue(ns)
 }
 
 func (c *TTLManager) update(old, obj interface{}) {
 	ns := obj.(*coreapi.Namespace)
-	c.logger.Debugf("enqueueing updated ns %s/%s", ns.GetNamespace(), ns.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing updated ns %s/%s", ns.GetNamespace(), ns.GetName())
+	}
 	c.enqueue(ns)
 }
 
 func (c *TTLManager) addPod(obj interface{}) {
 	pod := obj.(*coreapi.Pod)
-	c.logger.Debugf("enqueueing namespace for added pod %s/%s", pod.GetNamespace(), pod.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing namespace for added pod %s/%s", pod.GetNamespace(), pod.GetName())
+	}
 	c.enqueuePod(pod)
 }
 
 func (c *TTLManager) updatePod(old, obj interface{}) {
 	pod := obj.(*coreapi.Pod)
-	c.logger.Debugf("enqueueing namespace for updated pod %s/%s", pod.GetNamespace(), pod.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing namespace for updated pod %s/%s", pod.GetNamespace(), pod.GetName())
+	}
 	c.enqueuePod(pod)
 }
 
@@ -115,7 +125,9 @@ func (c *TTLManager) deletePod(obj interface{}) {
 			return
 		}
 	}
-	c.logger.Debugf("enqueueing namespace for deleted pod %s/%s", pod.GetNamespace(), pod.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing namespace for deleted pod %s/%s", pod.GetNamespace(), pod.GetName())
+	}
 	c.enqueuePod(pod)
 }
 
