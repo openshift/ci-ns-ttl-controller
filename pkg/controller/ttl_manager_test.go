@@ -527,6 +527,7 @@ func TestDetermineDeleteAt(t *testing.T) {
 }
 
 func TestDigestPods(t *testing.T) {
+	someTime := metav1.NewTime(time.Date(2000, time.January, 1, 1, 1, 1, 0, time.UTC))
 	var testCases = []struct {
 		name                       string
 		pods                       []*coreapi.Pod
@@ -558,6 +559,19 @@ func TestDigestPods(t *testing.T) {
 			}},
 			expectedActive:             true,
 			expectedLastTransitionTime: time.Time{},
+		},
+		{
+			name: "deleting pod",
+			pods: []*coreapi.Pod{{
+				ObjectMeta: metav1.ObjectMeta{
+					DeletionTimestamp: &someTime,
+				},
+				Status: coreapi.PodStatus{
+					Phase: coreapi.PodRunning,
+				},
+			}},
+			expectedActive:             false,
+			expectedLastTransitionTime: time.Date(2000, time.January, 1, 1, 1, 1, 0, time.UTC),
 		},
 		{
 			name: "terminated pod",

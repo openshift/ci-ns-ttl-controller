@@ -425,7 +425,7 @@ func (c *TTLManager) updateDeleteAtAnnotation(ns *coreapi.Namespace, deleteAt ti
 func digestPods(pods []*coreapi.Pod) (bool, time.Time) {
 	var lastTransitionTime time.Time
 	for _, pod := range pods {
-		if pod.Status.Phase == coreapi.PodPending || pod.Status.Phase == coreapi.PodRunning {
+		if pod.ObjectMeta.DeletionTimestamp == nil && (pod.Status.Phase == coreapi.PodPending || pod.Status.Phase == coreapi.PodRunning) {
 			return true, time.Time{}
 		}
 		for _, status := range pod.Status.ContainerStatuses {
@@ -435,6 +435,9 @@ func digestPods(pods []*coreapi.Pod) (bool, time.Time) {
 					lastTransitionTime = terminationTime
 				}
 			}
+		}
+		if pod.ObjectMeta.DeletionTimestamp != nil && pod.ObjectMeta.DeletionTimestamp.After(lastTransitionTime) {
+			lastTransitionTime = pod.ObjectMeta.DeletionTimestamp.Time
 		}
 	}
 	return false, lastTransitionTime
