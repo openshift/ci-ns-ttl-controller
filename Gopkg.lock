@@ -157,12 +157,12 @@
   version = "v2.0.1"
 
 [[projects]]
-  digest = "1:b2339e83ce9b5c4f79405f949429a7f68a9a904fed903c672aac1e7ceb7f5f02"
+  digest = "1:f3a83720e88101d4931d409b4766bc0457da6db6def361a095c7f4b249e228d7"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "3e01752db0189b9157070a0e1668a620f9a85da2"
-  version = "v1.0.6"
+  revision = "6699a89a232f3db797f2e280639854bbc4b89725"
+  version = "v1.7.0"
 
 [[projects]]
   digest = "1:15e5c398fbd9d2c439b635a08ac161b13d04f0c2aa587fe256b65dc0c3efe8b7"
@@ -481,6 +481,17 @@
   pruneopts = "NUT"
   revision = "e3762e86a74c878ffed47484592986685639c2cd"
 
+[[projects]]
+  branch = "master"
+  digest = "1:3c3d6e8883ffc2553bb7b59b1007a3d5a8100bb71ebc92c65203ccf98d2cab47"
+  name = "k8s.io/test-infra"
+  packages = [
+    "prow/logrusutil",
+    "prow/version",
+  ]
+  pruneopts = "NUT"
+  revision = "c33718b66ba567a38b7a2608479b7e6743a30d1a"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -504,6 +515,7 @@
     "k8s.io/client-go/tools/clientcmd",
     "k8s.io/client-go/tools/record",
     "k8s.io/client-go/util/workqueue",
+    "k8s.io/test-infra/prow/logrusutil",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
