@@ -189,6 +189,10 @@ func (c *Reaper) reconcile(key string) error {
 
 		if time.Now().After(deleteAt) {
 			logger.Info("namespace is past it's TTL, deleting")
+			if time.Now().Sub(ns.CreationTimestamp.Time) < time.Hour {
+				logger.Error("BUG: Would delete namespace that is less than an hour old")
+				return nil
+			}
 			return c.client.CoreV1().Namespaces().Delete(name, &metav1.DeleteOptions{})
 		} else {
 			// fuzz the retry into the future so we don't have weird time collisions
