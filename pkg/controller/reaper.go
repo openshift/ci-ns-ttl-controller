@@ -35,18 +35,19 @@ const (
 )
 
 // NewReaper returns a new *Reaper to reap namespaces.
-func NewReaper(informer coreinformers.NamespaceInformer, client kubeclientset.Interface) *Reaper {
+func NewReaper(informer coreinformers.NamespaceInformer, client kubeclientset.Interface, enableExtremelyVerboseLogging bool) *Reaper {
 	logger := logrus.WithField("controller", controllerName)
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(logger.Infof)
 	eventBroadcaster.StartRecordingToSink(&coreclient.EventSinkImpl{Interface: coreclient.New(client.CoreV1().RESTClient()).Events("")})
 
 	c := &Reaper{
-		client: client,
-		queue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
-		logger: logger,
-		lister: informer.Lister(),
-		synced: informer.Informer().HasSynced,
+		client:                        client,
+		queue:                         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
+		logger:                        logger,
+		lister:                        informer.Lister(),
+		synced:                        informer.Informer().HasSynced,
+		enableExtremelyVerboseLogging: enableExtremelyVerboseLogging,
 	}
 
 	informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -61,22 +62,27 @@ func NewReaper(informer coreinformers.NamespaceInformer, client kubeclientset.In
 type Reaper struct {
 	client kubeclientset.Interface
 
-	lister corelisters.NamespaceLister
-	queue  workqueue.RateLimitingInterface
-	synced cache.InformerSynced
+	lister                        corelisters.NamespaceLister
+	queue                         workqueue.RateLimitingInterface
+	synced                        cache.InformerSynced
+	enableExtremelyVerboseLogging bool
 
 	logger *logrus.Entry
 }
 
 func (c *Reaper) add(obj interface{}) {
 	ns := obj.(*coreapi.Namespace)
-	c.logger.Debugf("enqueueing added ns %s/%s", ns.GetNamespace(), ns.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing added ns %s/%s", ns.GetNamespace(), ns.GetName())
+	}
 	c.enqueue(ns)
 }
 
 func (c *Reaper) update(old, obj interface{}) {
 	ns := obj.(*coreapi.Namespace)
-	c.logger.Debugf("enqueueing updated ns %s/%s", ns.GetNamespace(), ns.GetName())
+	if c.enableExtremelyVerboseLogging {
+		c.logger.Debugf("enqueueing updated ns %s/%s", ns.GetNamespace(), ns.GetName())
+	}
 	c.enqueue(ns)
 }
 
@@ -164,7 +170,6 @@ func (c *Reaper) reconcile(key string) error {
 
 	ns, err := c.lister.Get(name)
 	if errors.IsNotFound(err) {
-		logger.Info("not doing work for namespace because it has been deleted")
 		return nil
 	}
 	if err != nil {
@@ -172,7 +177,6 @@ func (c *Reaper) reconcile(key string) error {
 		return err
 	}
 	if !ns.ObjectMeta.DeletionTimestamp.IsZero() {
-		logger.Info("not doing work for namespace because it is being deleted")
 		return nil
 	}
 

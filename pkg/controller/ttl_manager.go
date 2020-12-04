@@ -224,7 +224,6 @@ func (c *TTLManager) reconcile(key string) error {
 
 	ns, err := c.namespaceLister.Get(name)
 	if errors.IsNotFound(err) {
-		logger.Info("not doing work for namespace because it has been deleted")
 		return nil
 	}
 	if err != nil {
@@ -232,7 +231,6 @@ func (c *TTLManager) reconcile(key string) error {
 		return err
 	}
 	if !ns.ObjectMeta.DeletionTimestamp.IsZero() {
-		logger.Info("not doing work for namespace because it is being deleted")
 		return nil
 	}
 

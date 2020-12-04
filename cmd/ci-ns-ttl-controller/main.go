@@ -15,6 +15,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"k8s.io/test-infra/prow/logrusutil"
+
 	"github.com/openshift/ci-ns-ttl-controller/pkg/controller"
 )
 
@@ -30,7 +32,7 @@ type options struct {
 }
 
 func main() {
-	logrus.SetFormatter(&logrus.JSONFormatter{})
+	logrusutil.Init(&logrusutil.DefaultFieldsFormatter{PrintLineNumber: true, DefaultFields: logrus.Fields{"component": "namespace-ttl-controller"}})
 	o := options{}
 	flag.IntVar(&o.numWorkers, "num-workers", 10, "Number of worker threads.")
 	flag.StringVar(&o.logLevel, "log-level", logrus.DebugLevel.String(), "Logging level.")
@@ -55,7 +57,7 @@ func main() {
 
 	nsInformerFactory := informers.NewSharedInformerFactory(client, resync)
 
-	nsReaper := controller.NewReaper(nsInformerFactory.Core().V1().Namespaces(), client)
+	nsReaper := controller.NewReaper(nsInformerFactory.Core().V1().Namespaces(), client, o.enableExtremelyVerboseLogging)
 	nsTtlManager := controller.NewTTLManager(nsInformerFactory.Core().V1().Namespaces(), nsInformerFactory.Core().V1().Pods(), client, o.enableExtremelyVerboseLogging)
 	stop := make(chan struct{})
 	c := make(chan os.Signal, 2)
