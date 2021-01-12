@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"gopkg.in/fsnotify/fsnotify.v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -84,6 +85,25 @@ func main() {
 func loadClusterConfig() (*rest.Config, error) {
 	clusterConfig, err := rest.InClusterConfig()
 	if err == nil {
+		go func() {
+			watcher, err := fsnotify.NewWatcher()
+			if err != nil {
+				logrus.WithError(err).Error("failed to create fsnotify watcher for kubeconfig")
+				return
+			}
+			if err := watcher.Add("/var/run/secrets/kubernetes.io/serviceaccount/token"); err != nil {
+				logrus.WithError(err).Error("failed to add serviceaccount token to fsnotify watcher")
+				return
+			}
+			for event := range watcher.Events {
+				if event.Op == fsnotify.Chmod {
+					// For some reason we get frequent chmod events
+					continue
+				}
+				logrus.WithField("event", event.String()).Info("Token changed, exiting controller to reload it")
+				os.Exit(0)
+			}
+		}()
 		return clusterConfig, nil
 	}
 
