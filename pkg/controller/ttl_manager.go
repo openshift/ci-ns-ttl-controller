@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -407,14 +408,14 @@ func determineDeleteAt(status ttlStatus) (bool, bool, time.Time) {
 func (c *TTLManager) removeDeleteAtAnnotation(ns *coreapi.Namespace) error {
 	update := ns.DeepCopy()
 	delete(update.ObjectMeta.Annotations, deleteAtAnnotation)
-	_, err := c.client.CoreV1().Namespaces().Update(update)
+	_, err := c.client.CoreV1().Namespaces().Update(context.TODO(), update, metav1.UpdateOptions{})
 	return err
 }
 
 func (c *TTLManager) updateDeleteAtAnnotation(ns *coreapi.Namespace, deleteAt time.Time) error {
 	update := ns.DeepCopy()
 	update.ObjectMeta.Annotations[deleteAtAnnotation] = deleteAt.Format(time.RFC3339)
-	_, err := c.client.CoreV1().Namespaces().Update(update)
+	_, err := c.client.CoreV1().Namespaces().Update(context.TODO(), update, metav1.UpdateOptions{})
 	return err
 }
 

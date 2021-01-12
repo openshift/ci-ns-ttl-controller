@@ -10,7 +10,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"gopkg.in/fsnotify/fsnotify.v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -29,6 +28,7 @@ type options struct {
 	configLocation                string
 	numWorkers                    int
 	logLevel                      string
+	projectedTokenFile            string
 	enableExtremelyVerboseLogging bool
 }
 
@@ -37,6 +37,7 @@ func main() {
 	o := options{}
 	flag.IntVar(&o.numWorkers, "num-workers", 10, "Number of worker threads.")
 	flag.StringVar(&o.logLevel, "log-level", logrus.DebugLevel.String(), "Logging level.")
+	flag.StringVar(&o.projectedTokenFile, "projected-token-file", "", "A projected serviceaccount token file. If set, this will be configured as token file and get reloaded.")
 	flag.BoolVar(&o.enableExtremelyVerboseLogging, "enable-extremely-verbose-logging", false, "If enabled, log each and every pod or namespace event received. Warning: This creates a huge amount of logs.")
 	flag.Parse()
 
@@ -49,6 +50,10 @@ func main() {
 	clusterConfig, err := loadClusterConfig()
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to load cluster config")
+	}
+	if o.projectedTokenFile != "" {
+		clusterConfig.BearerTokenFile = o.projectedTokenFile
+		clusterConfig.BearerToken = ""
 	}
 
 	client, err := kubernetes.NewForConfig(clusterConfig)
@@ -85,25 +90,6 @@ func main() {
 func loadClusterConfig() (*rest.Config, error) {
 	clusterConfig, err := rest.InClusterConfig()
 	if err == nil {
-		go func() {
-			watcher, err := fsnotify.NewWatcher()
-			if err != nil {
-				logrus.WithError(err).Error("failed to create fsnotify watcher for kubeconfig")
-				return
-			}
-			if err := watcher.Add("/var/run/secrets/kubernetes.io/serviceaccount/token"); err != nil {
-				logrus.WithError(err).Error("failed to add serviceaccount token to fsnotify watcher")
-				return
-			}
-			for event := range watcher.Events {
-				if event.Op == fsnotify.Chmod {
-					// For some reason we get frequent chmod events
-					continue
-				}
-				logrus.WithField("event", event.String()).Info("Token changed, exiting controller to reload it")
-				os.Exit(0)
-			}
-		}()
 		return clusterConfig, nil
 	}
 

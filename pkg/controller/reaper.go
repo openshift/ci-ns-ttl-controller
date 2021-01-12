@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -193,7 +194,7 @@ func (c *Reaper) reconcile(key string) error {
 				logger.Error("BUG: Would delete namespace that is less than an hour old")
 				return nil
 			}
-			return c.client.CoreV1().Namespaces().Delete(name, &metav1.DeleteOptions{})
+			return c.client.CoreV1().Namespaces().Delete(context.TODO(), name, metav1.DeleteOptions{})
 		} else {
 			// fuzz the retry into the future so we don't have weird time collisions
 			retryAt := deleteAt.Add(10 * time.Second)
