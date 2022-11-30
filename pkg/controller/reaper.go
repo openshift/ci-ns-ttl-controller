@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -36,7 +37,7 @@ const (
 )
 
 // NewReaper returns a new *Reaper to reap namespaces.
-func NewReaper(informer coreinformers.NamespaceInformer, client kubeclientset.Interface, enableExtremelyVerboseLogging bool) *Reaper {
+func NewReaper(informer coreinformers.NamespaceInformer, client kubeclientset.Interface, enableExtremelyVerboseLogging bool, maxNamespaceAge time.Duration) *Reaper {
 	logger := logrus.WithField("controller", controllerName)
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(logger.Infof)
@@ -49,6 +50,7 @@ func NewReaper(informer coreinformers.NamespaceInformer, client kubeclientset.In
 		lister:                        informer.Lister(),
 		synced:                        informer.Informer().HasSynced,
 		enableExtremelyVerboseLogging: enableExtremelyVerboseLogging,
+		maxNamespaceAge:               maxNamespaceAge,
 	}
 
 	informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -67,6 +69,7 @@ type Reaper struct {
 	queue                         workqueue.RateLimitingInterface
 	synced                        cache.InformerSynced
 	enableExtremelyVerboseLogging bool
+	maxNamespaceAge               time.Duration
 
 	logger *logrus.Entry
 }
@@ -180,6 +183,11 @@ func (c *Reaper) reconcile(key string) error {
 	if !ns.ObjectMeta.DeletionTimestamp.IsZero() {
 		return nil
 	}
+	if createdByCIOperatorAndExceedMaxAge(ns, time.Now().Add(-c.maxNamespaceAge)) {
+		logger.Info("namespace is created by ci-operator and exceeded the max age, deleting")
+		//TODO Uncomment the following line if we feel confident about the above logs
+		//return c.client.CoreV1().Namespaces().Delete(context.TODO(), name, metav1.DeleteOptions{})
+	}
 
 	if deleteAtString, present := ns.ObjectMeta.Annotations[deleteAtAnnotation]; present {
 		deleteAt, err := time.Parse(time.RFC3339, deleteAtString)
@@ -204,4 +212,20 @@ func (c *Reaper) reconcile(key string) error {
 	}
 
 	return nil
+}
+
+var reNamespaceCreatedByCIOperator = regexp.MustCompile(`^ci-op-\w{8}$`)
+
+func createdByCIOperatorAndExceedMaxAge(ns *coreapi.Namespace, oldest time.Time) bool {
+	if !reNamespaceCreatedByCIOperator.MatchString(ns.Name) {
+		return false
+	}
+	if ns.Labels == nil || ns.Labels["dptp.openshift.io/requester"] != "ci-operator" {
+		return false
+	}
+	oldestM := metav1.NewTime(oldest)
+	if ns.CreationTimestamp.Before(&oldestM) {
+		return true
+	}
+	return false
 }

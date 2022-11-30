@@ -30,6 +30,7 @@ type options struct {
 	logLevel                      string
 	projectedTokenFile            string
 	enableExtremelyVerboseLogging bool
+	maxNamespaceAge               time.Duration
 }
 
 func main() {
@@ -39,6 +40,7 @@ func main() {
 	flag.StringVar(&o.logLevel, "log-level", logrus.DebugLevel.String(), "Logging level.")
 	flag.StringVar(&o.projectedTokenFile, "projected-token-file", "", "A projected serviceaccount token file. If set, this will be configured as token file and get reloaded.")
 	flag.BoolVar(&o.enableExtremelyVerboseLogging, "enable-extremely-verbose-logging", false, "If enabled, log each and every pod or namespace event received. Warning: This creates a huge amount of logs.")
+	flag.DurationVar(&o.maxNamespaceAge, "max-namespace-age", 30*24*time.Hour, "maximal time duration to keep the namespaces created by the ci-operator, e.g., 720h.")
 	flag.Parse()
 
 	level, err := logrus.ParseLevel(o.logLevel)
@@ -46,6 +48,10 @@ func main() {
 		logrus.WithError(err).Fatal("failed to parse log level")
 	}
 	logrus.SetLevel(level)
+
+	if o.maxNamespaceAge < 24*time.Hour {
+		logrus.Fatal("--max-namespace-age must be greater than 24h, the default timeout for ProwJob.")
+	}
 
 	clusterConfig, err := loadClusterConfig()
 	if err != nil {
@@ -63,7 +69,7 @@ func main() {
 
 	nsInformerFactory := informers.NewSharedInformerFactory(client, resync)
 
-	nsReaper := controller.NewReaper(nsInformerFactory.Core().V1().Namespaces(), client, o.enableExtremelyVerboseLogging)
+	nsReaper := controller.NewReaper(nsInformerFactory.Core().V1().Namespaces(), client, o.enableExtremelyVerboseLogging, o.maxNamespaceAge)
 	nsTtlManager := controller.NewTTLManager(nsInformerFactory.Core().V1().Namespaces(), nsInformerFactory.Core().V1().Pods(), client, o.enableExtremelyVerboseLogging)
 	stop := make(chan struct{})
 	c := make(chan os.Signal, 2)
