@@ -1,6 +1,6 @@
 module github.com/openshift/ci-ns-ttl-controller
 
-go 1.15
+go 1.20
 
 require (
 	github.com/sirupsen/logrus v1.7.0
